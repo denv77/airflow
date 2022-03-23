@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 20
+DRINKS_AIRFLOW_DAG_VERSION = 21
 
 
 
@@ -118,116 +118,122 @@ with DAG(
         
         query_results_length = len(query_results)
         print(f'Получено новой продукции: {query_results_length}')
+            
         # Количество картинок, которые вытащим из полученых PDF
         jpg_count = 0
-
-        timestr = time.strftime('%Y%m%d-%H%M%S')
-        relative_directory = f'cvat/{timestr}/img'
-        absolute_directory = f'{DRINKS_DATA_DIR}/{relative_directory}'
-        if not os.path.exists(absolute_directory):
-            os.makedirs(absolute_directory)
         
         files_for_cvat = []
+
         
-        for i, row in enumerate(query_results, start=1):
+        if query_results_length > 0:
             
-            print(f'Строка из БД: {row}')
-            
-            claim_id = row[0]
-            # class for index model
-            container_id = row[1]
-            frap_pdf = row[2]
+            timestr = time.strftime('%Y%m%d-%H%M%S')
+            relative_directory = f'cvat/{timestr}/img'
+            absolute_directory = f'{DRINKS_DATA_DIR}/{relative_directory}'
+            if not os.path.exists(absolute_directory):
+                os.makedirs(absolute_directory)
+
+
+
+            for i, row in enumerate(query_results, start=1):
+
+                print(f'Строка из БД: {row}')
+
+                claim_id = row[0]
+                # class for index model
+                container_id = row[1]
+                frap_pdf = row[2]
+
+                # Нужно обновлять последний обработанный идентификатор
+                if i == query_results_length:
+                    last_id = claim_id
+
+
+                # with open(f'{directory}/{row[0]}.pdf', 'wb') as file:
+                #     file.write(row[8])
+
+                # Необходимо перевести тип memoryview в массив байт
+                frap_pdf_bytes = frap_pdf.tobytes()
+
+                file_type = magic.from_buffer(frap_pdf_bytes, mime=True)
+                print(f'Тип файла: {file_type}')
+                if 'pdf' not in file_type:
+                    print('WARN Не обрабатывается')
+                    continue
+
+                pdf_file = fitz.open(stream=frap_pdf_bytes, filetype='pdf')
+
+                # iterate over pdf pages
+                for page_index in range(len(pdf_file)):
+                    # get the page itself
+                    page = pdf_file[page_index]
+                    image_list = page.get_images()
+
+                    # printing number of images found in this page
+                    if image_list:
+                        print(f"Найдено {len(image_list)} картинок на странице {page_index}")
+                    else:
+                        print("Не найдено картинок на странице", page_index)
+
+                    for image_index, img in enumerate(page.get_images(), start=1):
+
+                        xref = img[0]
+                        base_image = pdf_file.extract_image(xref)
+                        image_bytes = base_image["image"]
+                        image_ext = base_image["ext"]
+                        image = Image.open(io.BytesIO(image_bytes))
+
+                        # frap_id_directory = f'{directory}/{frap_id}'
+                        # if not os.path.exists(frap_id_directory):
+                        #     os.makedirs(frap_id_directory)
+
+                        with open(f"{absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}", "wb") as jpg:
+                            image.save(jpg)
+                        print(f'Сохранена картинка {absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}')
+                        files_for_cvat.append(f"{relative_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}")
+
+
+            cur.close()
+
+
+            if len(files_for_cvat) > 0:
+
+
+                user = Variable.get('drinks_cvat_user')
+                password = Variable.get('drinks_cvat_password')
+                auth_token = base64.b64encode(f'{user}:{password}'.encode()).decode()
+                headers = {'authorization': f'Basic {auth_token}'}
+
+
+                create_task_json = {
+                  "name": timestr,
+                  "project_id": int(Variable.get('drinks_cvat_project_id'))
+                }
+                print('create_task_json', create_task_json)
+
+                cvat_address = Variable.get('drinks_cvat_address')
+                url = f'{cvat_address}/api/v1/tasks'
+                response = requests.post(url, json=create_task_json, headers=headers)
+                print(response)
+                print(response.json())
+                new_task_id = response.json()['id']
+                print(new_task_id)
+
+
+                data = {}
+                data['image_quality'] = 75
+                data['server_files'] =  files_for_cvat
+
+                print(data)
+
+                url = f'{cvat_address}/api/v1/tasks/{new_task_id}/data'
+                response = requests.post(url, json=data, headers=headers)
+                print(response)
+                response.json()
+
 
             # Нужно обновлять последний обработанный идентификатор
-            if i == query_results_length:
-                last_id = claim_id
-                
-                         
-            # with open(f'{directory}/{row[0]}.pdf', 'wb') as file:
-            #     file.write(row[8])
-              
-            # Необходимо перевести тип memoryview в массив байт
-            frap_pdf_bytes = frap_pdf.tobytes()
-            
-            file_type = magic.from_buffer(frap_pdf_bytes, mime=True)
-            print(f'Тип файла: {file_type}')
-            if 'pdf' not in file_type:
-                print('WARN Не обрабатывается')
-                continue
-
-            pdf_file = fitz.open(stream=frap_pdf_bytes, filetype='pdf')
-            
-            # iterate over pdf pages
-            for page_index in range(len(pdf_file)):
-                # get the page itself
-                page = pdf_file[page_index]
-                image_list = page.get_images()
-
-                # printing number of images found in this page
-                if image_list:
-                    print(f"Найдено {len(image_list)} картинок на странице {page_index}")
-                else:
-                    print("Не найдено картинок на странице", page_index)
-
-                for image_index, img in enumerate(page.get_images(), start=1):
-                    
-                    xref = img[0]
-                    base_image = pdf_file.extract_image(xref)
-                    image_bytes = base_image["image"]
-                    image_ext = base_image["ext"]
-                    image = Image.open(io.BytesIO(image_bytes))
-                    
-                    # frap_id_directory = f'{directory}/{frap_id}'
-                    # if not os.path.exists(frap_id_directory):
-                    #     os.makedirs(frap_id_directory)
-                        
-                    with open(f"{absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}", "wb") as jpg:
-                        image.save(jpg)
-                    print(f'Сохранена картинка {absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}')
-                    files_for_cvat.append(f"{relative_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}")
-                 
-            
-        cur.close()
-        
-        
-        if len(files_for_cvat) > 0:
-        
-        
-            user = Variable.get('drinks_cvat_user')
-            password = Variable.get('drinks_cvat_password')
-            auth_token = base64.b64encode(f'{user}:{password}'.encode()).decode()
-            headers = {'authorization': f'Basic {auth_token}'}
-
-
-            create_task_json = {
-              "name": timestr,
-              "project_id": int(Variable.get('drinks_cvat_project_id'))
-            }
-            print('create_task_json', create_task_json)
-
-            cvat_address = Variable.get('drinks_cvat_address')
-            url = f'{cvat_address}/api/v1/tasks'
-            response = requests.post(url, json=create_task_json, headers=headers)
-            print(response)
-            print(response.json())
-            new_task_id = response.json()['id']
-            print(new_task_id)
-
-
-            data = {}
-            data['image_quality'] = 75
-            data['server_files'] =  files_for_cvat
-
-            print(data)
-
-            url = f'{cvat_address}/api/v1/tasks/{new_task_id}/data'
-            response = requests.post(url, json=data, headers=headers)
-            print(response)
-            response.json()
-        
-        
-        # Нужно обновлять последний обработанный идентификатор
-        Variable.set('drinks_last_id', last_id)
+            Variable.set('drinks_last_id', last_id)
         
         
         telegram(f'*Airflow Drinks ETL DAG*\n* image to cvat*\n```  pdf:{query_results_length:>10}\n  jpeg:{len(files_for_cvat):>9}\n  last id:{last_id:>6}```')
@@ -386,7 +392,7 @@ with DAG(
                                 dag_task_labeled_images_total_counter += labeled_images_counter
                                 dag_task_labeles_total_counter += labels_counter
                                 tasks_processed_total_counter += 1
-                                # Завершение 200 
+                    # Завершение 200 
                     break                
 
     
@@ -475,7 +481,9 @@ with DAG(
 
         
         
-        telegram(f'*Airflow Drinks ETL DAG*\n* create ngt index*\n```  index dir:     {timestamped_index_dir.split("/")[-1]}\n  sift nfeatures:           2000\n  sift edgeThreshold:         10\n  ngt dimension:             128\n  ngt distance type:       Angle\n  ngt edge creation size:     50\n  ngt edge search size:      100```')
+        # telegram(f'*Airflow Drinks ETL DAG*\n* create ngt index*\n```  index dir:     {timestamped_index_dir.split("/")[-1]}\n  sift nfeatures:           2000\n  sift edgeThreshold:         10\n  ngt dimension:             128\n  ngt distance type:       Angle\n  ngt edge creation size:     50\n  ngt edge search size:      100```')
+        
+        telegram(f'*Airflow Drinks ETL DAG*\n* create ngt index*\n```  index dir:     {timestamped_index_dir.split("/")[-1]}```')
         
         
         
