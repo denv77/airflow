@@ -29,11 +29,13 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 21
+DRINKS_AIRFLOW_DAG_VERSION = 27
 
 
 
 DRINKS_DATA_DIR = '/opt/airflow/drinks_data'
+ASSETS_FRAP_DIR = '/opt/airflow/assets_frap'
+
 GET_FROM_CVAT_RETRY_COUNT = 10
 
 
@@ -53,14 +55,15 @@ def telegram(message):
 
     response = requests.get(send_url)
     print(f'Telegram responce: {response}')
+    print(f'Telegram responce: {response.text}')
     
 
 
 
 with DAG(
-    dag_id='drinks_etl_dag',
-    schedule_interval='0 6 * * *',
-    start_date=datetime(2022, 3, 21),
+    dag_id=f'drinks_etl_dag',
+    schedule_interval='0 9 * * *',
+    start_date=datetime(2022, 3, 31),
     catchup=False,
     tags=['drinks'],
     max_active_runs=1
@@ -143,6 +146,10 @@ with DAG(
                 # class for index model
                 container_id = row[1]
                 frap_pdf = row[2]
+                
+                
+                container_id_dir = f'{ASSETS_FRAP_DIR}/{container_id}'
+                            
 
                 # Нужно обновлять последний обработанный идентификатор
                 if i == query_results_length:
@@ -175,6 +182,10 @@ with DAG(
                     else:
                         print("Не найдено картинок на странице", page_index)
 
+                    if len(image_list) > 0 and not os.path.exists(container_id_dir):
+                        os.makedirs(container_id_dir)
+                        
+                        
                     for image_index, img in enumerate(page.get_images(), start=1):
 
                         xref = img[0]
@@ -191,6 +202,14 @@ with DAG(
                             image.save(jpg)
                         print(f'Сохранена картинка {absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}')
                         files_for_cvat.append(f"{relative_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}")
+                        
+                        
+                        
+                        with open(f"{container_id_dir}/{container_id}_{page_index+1}_{image_index}.{image_ext}", "wb") as jpg:
+                            image.save(jpg)
+                        print(f'Сохранена картинка для assets_frap {container_id_dir}/{container_id}_{page_index+1}_{image_index}.{image_ext}')
+
+
 
 
             cur.close()
@@ -501,11 +520,13 @@ with DAG(
         
         update_url = Variable.get('drinks_api_update_url') 
         response = requests.get(update_url, verify=False)
-        print(f'Drinks API responce: {response}')
-        print(f'Drinks API responce: {response.text}')
+        print(f'Drinks API response: {response}')
+        print(f'Drinks API response: {response.text}')
 
-        telegram(f'*Airflow Drinks ETL DAG*\n* deploy ngt index*\n```  response code: {response.status_code}```')
+        telegram(f'*Airflow Drinks ETL DAG*\n* deploy ngt index*\n```  response code: {response.status_code}\n  {response.text}```')
 
+        if response.status_code != 200:
+            raise ValueError('Index deploy error')
         
         
     deploy_ngt_index_task = deploy_ngt_index()
