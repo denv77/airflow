@@ -61,8 +61,8 @@ x-airflow-common:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
     - ./plugins:/opt/airflow/plugins
-    - ./drinks_data/drinks_data:/opt/airflow/drinks_data
-    - ./drinks_data/assets_frap:/opt/airflow/assets_frap
+    - ./resources/drinks/drinks_data:/opt/airflow/resources/drinks/drinks_data
+    - ./resources/drinks/assets_frap:/opt/airflow/resources/drinks/assets_frap
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     &airflow-common-depends-on
