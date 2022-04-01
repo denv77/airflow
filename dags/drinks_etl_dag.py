@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 28
+DRINKS_AIRFLOW_DAG_VERSION = 29
 
 
 
@@ -267,8 +267,8 @@ with DAG(
     
     
     
-    def get_cvat_tasks(user, status, headers):
-        url = f'http://10.0.59.18:8080/api/v1/tasks?owner={user}&status={status}'
+    def get_cvat_tasks(address, user, status, headers):
+        url = f'{address}/api/v1/tasks?owner={user}&status={status}'
         response = requests.get(url, headers=headers)
         print(response)
         print(response.json())
@@ -282,6 +282,7 @@ with DAG(
     def cvat_exported_crop_lable(**kwargs):
         print('cvat_exported_crop_lable')
         
+        cvat_address = Variable.get('drinks_cvat_address')
         
         user = Variable.get('drinks_cvat_user')
         password = Variable.get('drinks_cvat_password')
@@ -289,9 +290,9 @@ with DAG(
         headers = {'authorization': f'Basic {auth_token}'}
         
         
-        cvat_tasks_annotation = get_cvat_tasks(user, 'annotation', headers)
-        cvat_tasks_validation = get_cvat_tasks(user, 'validation', headers)
-        cvat_tasks_complete = get_cvat_tasks(user, 'complete', headers)
+        cvat_tasks_annotation = get_cvat_tasks(cvat_address, user, 'annotation', headers)
+        cvat_tasks_validation = get_cvat_tasks(cvat_address, user, 'validation', headers)
+        cvat_tasks_complete = get_cvat_tasks(cvat_address, user, 'complete', headers)
         
         # Если есть папка labels и она не пустая, то считаем, что уже обработали
         labels_processed = glob.glob(f'{DRINKS_DATA_DIR}/cvat/*/labels/*')
@@ -318,7 +319,7 @@ with DAG(
                 'format': 'CVAT for images 1.1',
                 'action': 'download'
             }
-            url = f'http://10.0.59.18:8080/api/v1/tasks/{task_id}/annotations'
+            url = f'{cvat_address}/api/v1/tasks/{task_id}/annotations'
 
             retry_index = 0
             while retry_index < GET_FROM_CVAT_RETRY_COUNT:
