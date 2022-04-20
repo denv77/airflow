@@ -269,7 +269,7 @@ with DAG(
     
     
     
-    def get_cvat_tasks(address, status, headers, org, page=1, pageSize==100000, sort='id'):
+    def get_cvat_tasks(address, status, headers, org, page=1, pageSize=100000, sort='id'):
         filterParam = urllib.parse.quote(f'{{"==":[{{"var":"status"}},"{status}"]}}')
         url = f'{address}/api/tasks?org={org}&page={page}&page_size={pageSize}&sort={sort}&filter={filterParam}'
         response = requests.get(url, headers=headers)
@@ -326,7 +326,7 @@ with DAG(
                 'format': 'CVAT for images 1.1',
                 'action': 'download'
             }
-            url = f'{cvat_address}/api/v1/tasks/{task_id}/annotations'
+            url = f'{cvat_address}/api/tasks/{task_id}/annotations'
 
             retry_index = 0
             while retry_index < GET_FROM_CVAT_RETRY_COUNT:
@@ -338,7 +338,7 @@ with DAG(
                 print('status_code', response.status_code)
 
                 # файл подготавливается, нужно пождать немного
-                if response.status_code == 201:
+                if response.status_code == 201 or response.status_code == 202:
                     time.sleep(3)
 
                 elif response.status_code == 200:
