@@ -13,6 +13,7 @@ import pickle
 import glob
 import psycopg2
 import requests
+import urllib.parse
 import fitz
 from PIL import Image
 import magic
@@ -29,7 +30,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 29
+DRINKS_AIRFLOW_DAG_VERSION = 30
 
 
 
@@ -63,7 +64,7 @@ def telegram(message):
 with DAG(
     dag_id=f'drinks_etl_dag',
     schedule_interval='0 9 * * *',
-    start_date=datetime(2022, 3, 31),
+    start_date=datetime(2022, 4, 10),
     catchup=False,
     tags=['drinks'],
     max_active_runs=1
@@ -218,6 +219,7 @@ with DAG(
             if len(files_for_cvat) > 0:
 
 
+                org = Variable.get('drinks_cvat_org')
                 user = Variable.get('drinks_cvat_user')
                 password = Variable.get('drinks_cvat_password')
                 auth_token = base64.b64encode(f'{user}:{password}'.encode()).decode()
@@ -231,7 +233,7 @@ with DAG(
                 print('create_task_json', create_task_json)
 
                 cvat_address = Variable.get('drinks_cvat_address')
-                url = f'{cvat_address}/api/v1/tasks'
+                url = f'{cvat_address}/api/tasks?org={org}'
                 response = requests.post(url, json=create_task_json, headers=headers)
                 print(response)
                 print(response.json())
@@ -240,12 +242,12 @@ with DAG(
 
 
                 data = {}
-                data['image_quality'] = 75
+                data['image_quality'] = 100
                 data['server_files'] =  files_for_cvat
 
                 print(data)
 
-                url = f'{cvat_address}/api/v1/tasks/{new_task_id}/data'
+                url = f'{cvat_address}/api/tasks/{new_task_id}/data'
                 response = requests.post(url, json=data, headers=headers)
                 print(response)
                 response.json()
@@ -267,8 +269,9 @@ with DAG(
     
     
     
-    def get_cvat_tasks(address, user, status, headers):
-        url = f'{address}/api/v1/tasks?owner={user}&status={status}'
+    def get_cvat_tasks(address, status, headers, org, page=1, pageSize==100000, sort='id'):
+        filterParam = urllib.parse.quote(f'{{"==":[{{"var":"status"}},"{status}"]}}')
+        url = f'{address}/api/tasks?org={org}&page={page}&page_size={pageSize}&sort={sort}&filter={filterParam}'
         response = requests.get(url, headers=headers)
         print(response)
         print(response.json())
@@ -284,15 +287,19 @@ with DAG(
         
         cvat_address = Variable.get('drinks_cvat_address')
         
+        org = Variable.get('drinks_cvat_org')
+        page = Variable.get('drinks_cvat_tasks_page', 1)
+        pageSize = Variable.get('drinks_cvat_tasks_page_size', 100000)
+        sort = Variable.get('drinks_cvat_tasks_sort', 'id')
         user = Variable.get('drinks_cvat_user')
         password = Variable.get('drinks_cvat_password')
         auth_token = base64.b64encode(f'{user}:{password}'.encode()).decode()
         headers = {'authorization': f'Basic {auth_token}'}
         
         
-        cvat_tasks_annotation = get_cvat_tasks(cvat_address, user, 'annotation', headers)
-        cvat_tasks_validation = get_cvat_tasks(cvat_address, user, 'validation', headers)
-        cvat_tasks_complete = get_cvat_tasks(cvat_address, user, 'complete', headers)
+        cvat_tasks_annotation = get_cvat_tasks(cvat_address, 'annotation', headers, org, page, pageSize, sort)
+        cvat_tasks_validation = get_cvat_tasks(cvat_address, 'validation', headers, org, page, pageSize, sort)
+        cvat_tasks_complete = get_cvat_tasks(cvat_address, 'complete', headers, org, page, pageSize, sort)
         
         # Если есть папка labels и она не пустая, то считаем, что уже обработали
         labels_processed = glob.glob(f'{DRINKS_DATA_DIR}/cvat/*/labels/*')
@@ -538,4 +545,3 @@ with DAG(
     image_to_cvat_task >> cvat_exported_crop_lable_task
     cvat_exported_crop_lable_task >> create_ngt_index_task
     create_ngt_index_task >> deploy_ngt_index_task
-
