@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 30
+DRINKS_AIRFLOW_DAG_VERSION = 32
 
 
 
@@ -299,7 +299,7 @@ with DAG(
         
         cvat_tasks_annotation = get_cvat_tasks(cvat_address, 'annotation', headers, org, page, pageSize, sort)
         cvat_tasks_validation = get_cvat_tasks(cvat_address, 'validation', headers, org, page, pageSize, sort)
-        cvat_tasks_complete = get_cvat_tasks(cvat_address, 'complete', headers, org, page, pageSize, sort)
+        cvat_tasks_complete = get_cvat_tasks(cvat_address, 'completed', headers, org, page, pageSize, sort)
         
         # Если есть папка labels и она не пустая, то считаем, что уже обработали
         labels_processed = glob.glob(f'{DRINKS_DATA_DIR}/cvat/*/labels/*')
