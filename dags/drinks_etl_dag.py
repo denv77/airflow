@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 32
+DRINKS_AIRFLOW_DAG_VERSION = 33
 
 
 
@@ -63,8 +63,8 @@ def telegram(message):
 
 with DAG(
     dag_id=f'drinks_etl_dag',
-    schedule_interval='0 9 * * *',
-    start_date=datetime(2022, 4, 10),
+    schedule_interval='0 5 * * *',
+    start_date=datetime(2022, 4, 23),
     catchup=False,
     tags=['drinks'],
     max_active_runs=1
@@ -76,7 +76,7 @@ with DAG(
     def start_notification(**kwargs):
         # pprint(kwargs)
         print('start_notification')
-        # Самый первый last_id = 970
+        # Самый первый last_id = 970 (был на тестовом стенде, теперь используем cntr.id, а не c.id и берем для старта cntr.id > 0)
         last_id = Variable.get("drinks_last_id")
         print(f'drinks_last_id: {last_id}')
         
@@ -143,6 +143,7 @@ with DAG(
 
                 print(f'Строка из БД: {row}')
 
+                # 23.04.2022 Больше не используется, решено использовать container_id (cntr.id)
                 claim_id = row[0]
                 # class for index model
                 container_id = row[1]
@@ -154,7 +155,7 @@ with DAG(
 
                 # Нужно обновлять последний обработанный идентификатор
                 if i == query_results_length:
-                    last_id = claim_id
+                    last_id = container_id
 
 
                 # with open(f'{directory}/{row[0]}.pdf', 'wb') as file:
