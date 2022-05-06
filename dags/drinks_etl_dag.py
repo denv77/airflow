@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 33
+DRINKS_AIRFLOW_DAG_VERSION = 36
 
 
 
@@ -54,7 +54,7 @@ def telegram(message):
                     '&parse_mode=Markdown' + \
                     '&text=' + message
 
-    response = requests.get(send_url)
+    response = requests.get(send_url, verify=False)
     print(f'Telegram responce: {response}')
     print(f'Telegram responce: {response.text}')
     
@@ -63,7 +63,7 @@ def telegram(message):
 
 with DAG(
     dag_id=f'drinks_etl_dag',
-    schedule_interval='0 5 * * *',
+    schedule_interval=Variable.get('drinks_dag_schedule_interval', default_var='0 5 * * *'),
     start_date=datetime(2022, 4, 23),
     catchup=False,
     tags=['drinks'],
@@ -80,7 +80,12 @@ with DAG(
         last_id = Variable.get("drinks_last_id")
         print(f'drinks_last_id: {last_id}')
         
-        telegram(f'*Airflow Drinks ETL DAG*\n* start notification*\n```  version:{DRINKS_AIRFLOW_DAG_VERSION:>6}\n  last id:{last_id:>6}```')
+        total, used, free = shutil.disk_usage(DRINKS_DATA_DIR)
+        print("Total: %d GiB" % (total // (2**30)))
+        print("Used: %d GiB" % (used // (2**30)))
+        print("Free: %d GiB" % (free // (2**30)))
+        
+        telegram(f'*Airflow Drinks ETL DAG*\n* start notification*\n```  version:{DRINKS_AIRFLOW_DAG_VERSION:>6}\n  last id:{last_id:>6}\n\n  DISK USAGE (GB)\n   total:{(total // (2**30)):>7}\n   used:{(used // (2**30)):>8}\n   free:{(free // (2**30)):>8}```')
         
         
         
@@ -235,7 +240,7 @@ with DAG(
 
                 cvat_address = Variable.get('drinks_cvat_address')
                 url = f'{cvat_address}/api/tasks?org={org}'
-                response = requests.post(url, json=create_task_json, headers=headers)
+                response = requests.post(url, json=create_task_json, headers=headers, verify=False)
                 print(response)
                 print(response.json())
                 new_task_id = response.json()['id']
@@ -249,7 +254,7 @@ with DAG(
                 print(data)
 
                 url = f'{cvat_address}/api/tasks/{new_task_id}/data'
-                response = requests.post(url, json=data, headers=headers)
+                response = requests.post(url, json=data, headers=headers, verify=False)
                 print(response)
                 response.json()
 
@@ -273,7 +278,7 @@ with DAG(
     def get_cvat_tasks(address, status, headers, org, page=1, pageSize=100000, sort='id'):
         filterParam = urllib.parse.quote(f'{{"==":[{{"var":"status"}},"{status}"]}}')
         url = f'{address}/api/tasks?org={org}&page={page}&page_size={pageSize}&sort={sort}&filter={filterParam}'
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, verify=False)
         print(response)
         print(response.json())
         tasks = {r['id']: r['name'] for r in response.json()['results']}
@@ -334,7 +339,7 @@ with DAG(
                 retry_index += 1
                 print(f'Попытка номер {retry_index} экспортировать разметку для задачи id: {task_id}, name: {task_name}')
                 
-                response = requests.get(url, headers=headers, params=params)
+                response = requests.get(url, headers=headers, params=params, verify=False)
                 print('content-type', response.headers.get('content-type'))
                 print('status_code', response.status_code)
 
