@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 36
+DRINKS_AIRFLOW_DAG_VERSION = 37
 
 
 
@@ -250,6 +250,7 @@ with DAG(
                 data = {}
                 data['image_quality'] = 100
                 data['server_files'] =  files_for_cvat
+                data['storage'] = "share"
 
                 print(data)
 
