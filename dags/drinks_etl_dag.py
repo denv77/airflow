@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 37
+DRINKS_AIRFLOW_DAG_VERSION = 39
 
 
 
@@ -113,7 +113,11 @@ with DAG(
         
         if 'dev' in Variable.get('drinks_profiles'):
             sql_select_images = Variable.get('drinks_sql_select_images_with_limit') 
-        
+            
+        is_custom_profile = 'custom' in Variable.get('drinks_profiles')
+            
+        if is_custom_profile:
+            sql_select_images = Variable.get('drinks_sql_select_images_custom') 
         
         print(f'last_id: {last_id}')
         print(f'sql_select_image: {sql_select_images}')
@@ -121,7 +125,12 @@ with DAG(
         # Получаем новую алкогольную продукцию
         conn = psycopg2.connect(host=host, port=port, database=db_name, user=user, password=password)
         cur = conn.cursor()
-        cur.execute(sql_select_images, (last_id,))
+        
+        if is_custom_profile:            
+            cur.execute(sql_select_images)
+        else:
+            cur.execute(sql_select_images, (last_id,))
+            
         query_results = cur.fetchall()
         conn.close()
         
@@ -149,10 +158,10 @@ with DAG(
                 print(f'Строка из БД: {row}')
 
                 # 23.04.2022 Больше не используется, решено использовать container_id (cntr.id)
-                claim_id = row[0]
+                # claim_id = row[0]
                 # class for index model
-                container_id = row[1]
-                frap_pdf = row[2]
+                container_id = row[0]
+                frap_pdf = row[1]
                 
                 
                 container_id_dir = f'{ASSETS_FRAP_DIR}/{container_id}'
@@ -259,12 +268,14 @@ with DAG(
                 print(response)
                 response.json()
 
+            if not is_custom_profile:
+                # Нужно обновлять последний обработанный идентификатор
+                Variable.set('drinks_last_id', last_id)
+        
+        
 
-            # Нужно обновлять последний обработанный идентификатор
-            Variable.set('drinks_last_id', last_id)
-        
-        
         telegram(f'*Airflow Drinks ETL DAG*\n* image to cvat*\n```  pdf:{query_results_length:>10}\n  jpeg:{len(files_for_cvat):>9}\n  last id:{last_id:>6}```')
+        
         
      
     
@@ -462,7 +473,8 @@ with DAG(
             image = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
             image_list.append(image)
             names.append(int(class_name))
-        print('classes count', len(names))
+        print('files count', len(names))
+        print('classes count', len(set(names)))
         return image_list, names
     
     
