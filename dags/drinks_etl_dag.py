@@ -1,7 +1,7 @@
 import logging
 import shutil
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import pendulum
 from pprint import pprint
 import io
@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 42
+DRINKS_AIRFLOW_DAG_VERSION = 43
 
 
 
@@ -74,7 +74,7 @@ with DAG(
 
     
     
-    @task(task_id='start_notification', execution_timeout=datetime.timedelta(minutes=5))
+    @task(task_id='start_notification', execution_timeout=timedelta(minutes=5))
     def start_notification(**kwargs):
         # pprint(kwargs)
         print('start_notification')
@@ -107,7 +107,7 @@ with DAG(
     
         
         
-    @task(task_id='image_to_cvat', execution_timeout=datetime.timedelta(hours=3))
+    @task(task_id='image_to_cvat', execution_timeout=timedelta(hours=3))
     def image_to_cvat():
 
         print('image_to_cvat')
@@ -480,7 +480,7 @@ with DAG(
 
     cvat_exported_crop_lable_task = ShortCircuitOperator(
         task_id="cvat_exported_crop_lable",
-        execution_timeout=datetime.timedelta(hours=4),
+        execution_timeout=timedelta(hours=4),
         python_callable=cvat_exported_crop_lable,
         provide_context=True,
         op_kwargs={},
@@ -510,7 +510,7 @@ with DAG(
     
     
     
-    @task(task_id='create_ngt_index', execution_timeout=datetime.timedelta(hours=8))
+    @task(task_id='create_ngt_index', execution_timeout=timedelta(hours=8))
     def create_ngt_index():
         print('create_ngt_index')
        
@@ -573,7 +573,7 @@ with DAG(
     
     
     
-    @task(task_id='deploy_ngt_index', execution_timeout=datetime.timedelta(hours=1))
+    @task(task_id='deploy_ngt_index', execution_timeout=timedelta(hours=1))
     def deploy_ngt_index():
         
         print('deploy_ngt_index')
