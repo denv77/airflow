@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pendulum
 from pprint import pprint
 import io
+import traceback
 
 import cv2
 import xml.etree.ElementTree as ET
@@ -32,7 +33,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 44
+DRINKS_AIRFLOW_DAG_VERSION = 45
 
 
 
@@ -234,8 +235,19 @@ with DAG(
                             is_absolute_directory_exists = True
                             os.makedirs(absolute_directory)
 
-                        with open(f"{absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}", "wb") as jpg:
-                            image.save(jpg)
+                            
+                        try:
+                            with open(f"{absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}", "wb") as jpg:
+                                image.save(jpg)
+                        except Exception as e:
+                            print(f'Ошибка сохранения картинки {absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}')
+                            print(e)
+                            print(traceback.format_exc())
+                            # Если папка пустая, то удаляем ее на случай, если туда больше ничего не запишется
+                            if not os.listdir(absolute_directory):
+                                shutil.rmtree(absolute_directory, ignore_errors=True)
+                            continue
+                            
                         print(f'Сохранена картинка {absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}')
                         files_for_cvat.append(f"{relative_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}")
                         
