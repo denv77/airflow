@@ -74,7 +74,7 @@ with DAG(
 
     
     
-    @task(task_id='start_notification')
+    @task(task_id='start_notification', execution_timeout=datetime.timedelta(minutes=5))
     def start_notification(**kwargs):
         # pprint(kwargs)
         print('start_notification')
@@ -107,7 +107,7 @@ with DAG(
     
         
         
-    @task(task_id='image_to_cvat')
+    @task(task_id='image_to_cvat', execution_timeout=datetime.timedelta(hours=3))
     def image_to_cvat():
 
         print('image_to_cvat')
@@ -480,6 +480,7 @@ with DAG(
 
     cvat_exported_crop_lable_task = ShortCircuitOperator(
         task_id="cvat_exported_crop_lable",
+        execution_timeout=datetime.timedelta(hours=4),
         python_callable=cvat_exported_crop_lable,
         provide_context=True,
         op_kwargs={},
@@ -509,7 +510,7 @@ with DAG(
     
     
     
-    @task(task_id='create_ngt_index')
+    @task(task_id='create_ngt_index', execution_timeout=datetime.timedelta(hours=8))
     def create_ngt_index():
         print('create_ngt_index')
        
@@ -572,7 +573,7 @@ with DAG(
     
     
     
-    @task(task_id='deploy_ngt_index')
+    @task(task_id='deploy_ngt_index', execution_timeout=datetime.timedelta(hours=1))
     def deploy_ngt_index():
         
         print('deploy_ngt_index')
