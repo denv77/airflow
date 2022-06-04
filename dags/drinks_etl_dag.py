@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 47
+DRINKS_AIRFLOW_DAG_VERSION = 48
 
 
 
@@ -235,7 +235,8 @@ with DAG(
                             is_absolute_directory_exists = True
                             os.makedirs(absolute_directory)
 
-                        image_save_path = f"{absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}"
+                        image_save_filename = f"{container_id}_{page_index+1}_{image_index}.{image_ext}"
+                        image_save_path = f"{absolute_directory}/{image_save_filename}"
                         try:
                             with open(image_save_path, "wb") as jpg:
                                 image.save(jpg)
@@ -252,16 +253,16 @@ with DAG(
                             continue
                             
                         print(f'Сохранена картинка {image_save_path}')
-                        files_for_cvat.append(f"{image_save_path}")
+                        files_for_cvat.append(f"{relative_directory}/{image_save_filename}")
                         
                         # Нужно проверять здесь, так как может вылезти ошибка на шаге extract_image
                         if not is_container_id_dir_exists:
                             is_container_id_dir_exists = True
                             os.makedirs(container_id_dir)
                         
-                        with open(f"{container_id_dir}/{container_id}_{page_index+1}_{image_index}.{image_ext}", "wb") as jpg:
+                        with open(f"{container_id_dir}/{image_save_filename}", "wb") as jpg:
                             image.save(jpg)
-                        print(f'Сохранена картинка для assets_frap {container_id_dir}/{container_id}_{page_index+1}_{image_index}.{image_ext}')
+                        print(f'Сохранена картинка для assets_frap {container_id_dir}/{image_save_filename}')
 
 
 
@@ -297,9 +298,8 @@ with DAG(
                 data = {}
                 data['image_quality'] = 100
                 data['server_files'] =  files_for_cvat
-                # Почему-то не работает на проде
-                # data['use_cache'] = True
-                # data['storage_method'] = "cache"
+                data['use_cache'] = True
+                data['storage_method'] = "cache"
                 data['storage'] = "share"
 
                 print(data)
