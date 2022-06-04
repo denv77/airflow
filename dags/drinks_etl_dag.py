@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 43
+DRINKS_AIRFLOW_DAG_VERSION = 44
 
 
 
@@ -40,6 +40,9 @@ DRINKS_DATA_DIR = '/opt/airflow/resources/drinks/drinks_data'
 ASSETS_FRAP_DIR = '/opt/airflow/resources/drinks/assets_frap'
 
 GET_FROM_CVAT_RETRY_COUNT = 10
+
+# Разрешаем работу с обрезанными картинками
+Image.LOAD_TRUNCATED_IMAGES = True
 
 
 def telegram(message):
