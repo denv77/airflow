@@ -279,6 +279,8 @@ with DAG(
                 data = {}
                 data['image_quality'] = 100
                 data['server_files'] =  files_for_cvat
+                data['use_cache'] = true
+                data['storage_method'] = "cache"
                 data['storage'] = "share"
 
                 print(data)
@@ -578,7 +580,13 @@ with DAG(
         
         print('deploy_ngt_index')
         
+        update_enable = Variable.get('drinks_api_update_enable', "False").lower() == 'true'
+        print('drinks_api_update_enable:', update_enable)
         
+        if not update_enable:
+            telegram(f'*Airflow Drinks ETL DAG*\n* deploy ngt index*\n```  update enable: {update_enable}```')
+            return
+            
         update_url = Variable.get('drinks_api_update_url') 
         response = requests.get(update_url, verify=False)
         print(f'Drinks API response: {response}')
