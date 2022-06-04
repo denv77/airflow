@@ -2,6 +2,7 @@ import logging
 import shutil
 import time
 from datetime import datetime
+import pendulum
 from pprint import pprint
 import io
 
@@ -65,7 +66,7 @@ def telegram(message):
 with DAG(
     dag_id=f'drinks_etl_dag',
     schedule_interval=Variable.get('drinks_dag_schedule_interval', default_var='0 5 * * *'),
-    start_date=datetime(2022, 4, 23),
+    start_date=pendulum.datetime(2022, 4, 23, tz="Europe/Moscow"),
     catchup=False,
     tags=['drinks'],
     max_active_runs=1
