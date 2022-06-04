@@ -24,13 +24,14 @@ from airflow import DAG
 from airflow.decorators import task
 from airflow.models import Variable
 from airflow.operators.python import ShortCircuitOperator
+from airflow.exceptions import AirflowFailException
 
 
 log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 39
+DRINKS_AIRFLOW_DAG_VERSION = 42
 
 
 
@@ -79,11 +80,19 @@ with DAG(
         # Самый первый last_id = 970 (был на тестовом стенде, теперь используем cntr.id, а не c.id и берем для старта cntr.id > 0)
         last_id = Variable.get("drinks_last_id")
         print(f'drinks_last_id: {last_id}')
+        min_free_space = Variable.get('drinks_infrastructure_min_free_space', 10)
+        print(f'min_free_space: {min_free_space} GiB')
         
         total, used, free = shutil.disk_usage(DRINKS_DATA_DIR)
+        free_space = (free // (2**30))
         print("Total: %d GiB" % (total // (2**30)))
         print("Used: %d GiB" % (used // (2**30)))
-        print("Free: %d GiB" % (free // (2**30)))
+        print("Free: %d GiB" % free_space)
+        
+        if free_space <= min_free_space:
+            telegram(f'*Airflow Drinks ETL DAG*\n* start notification*\n```  version:{DRINKS_AIRFLOW_DAG_VERSION:>6}\n  last id:{last_id:>6}\n\n  DISK USAGE (GB)\n   total:{(total // (2**30)):>7}\n   used:{(used // (2**30)):>8}\n   free:{(free // (2**30)):>8}```\n*ERROR Disk free space <= {min_free_space} Gib*')
+            raise AirflowFailException(f"Disk free space {free_space} GiB")
+        
         
         telegram(f'*Airflow Drinks ETL DAG*\n* start notification*\n```  version:{DRINKS_AIRFLOW_DAG_VERSION:>6}\n  last id:{last_id:>6}\n\n  DISK USAGE (GB)\n   total:{(total // (2**30)):>7}\n   used:{(used // (2**30)):>8}\n   free:{(free // (2**30)):>8}```')
         
@@ -99,7 +108,7 @@ with DAG(
         
     @task(task_id='image_to_cvat')
     def image_to_cvat():
-        
+
         print('image_to_cvat')
         print(f'Profiles: {Variable.get("drinks_profiles")}')
         
@@ -148,8 +157,7 @@ with DAG(
             timestr = time.strftime('%Y%m%d-%H%M%S')
             relative_directory = f'cvat/{timestr}/img'
             absolute_directory = f'{DRINKS_DATA_DIR}/{relative_directory}'
-            if not os.path.exists(absolute_directory):
-                os.makedirs(absolute_directory)
+            is_absolute_directory_exists = os.path.exists(absolute_directory)
 
 
 
@@ -165,6 +173,7 @@ with DAG(
                 
                 
                 container_id_dir = f'{ASSETS_FRAP_DIR}/{container_id}'
+                is_container_id_dir_exists = os.path.exists(container_id_dir)
                             
 
                 # Нужно обновлять последний обработанный идентификатор
@@ -198,28 +207,38 @@ with DAG(
                     else:
                         print("Не найдено картинок на странице", page_index)
 
-                    if len(image_list) > 0 and not os.path.exists(container_id_dir):
-                        os.makedirs(container_id_dir)
+                    # Нужно перенести ниже, так как может вылезти ошибка на шаге extract_image
+                    # if len(image_list) > 0 and not os.path.exists(container_id_dir):
+                    #     os.makedirs(container_id_dir)
                         
                         
-                    for image_index, img in enumerate(page.get_images(), start=1):
+                    for image_index, img in enumerate(image_list, start=1):
 
                         xref = img[0]
                         base_image = pdf_file.extract_image(xref)
+                        
+                        if base_image is None:
+                            print(f'WARNING Нет картинки {image_index} на странице {page_index}')
+                            continue
+                            
                         image_bytes = base_image["image"]
                         image_ext = base_image["ext"]
                         image = Image.open(io.BytesIO(image_bytes))
 
-                        # frap_id_directory = f'{directory}/{frap_id}'
-                        # if not os.path.exists(frap_id_directory):
-                        #     os.makedirs(frap_id_directory)
+                        # Нужно проверять здесь, так как может вылезти ошибка на шаге extract_image
+                        if not is_absolute_directory_exists:
+                            is_absolute_directory_exists = True
+                            os.makedirs(absolute_directory)
 
                         with open(f"{absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}", "wb") as jpg:
                             image.save(jpg)
                         print(f'Сохранена картинка {absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}')
                         files_for_cvat.append(f"{relative_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}")
                         
-                        
+                        # Нужно проверять здесь, так как может вылезти ошибка на шаге extract_image
+                        if not is_container_id_dir_exists:
+                            is_container_id_dir_exists = True
+                            os.makedirs(container_id_dir)
                         
                         with open(f"{container_id_dir}/{container_id}_{page_index+1}_{image_index}.{image_ext}", "wb") as jpg:
                             image.save(jpg)
@@ -301,6 +320,7 @@ with DAG(
     
     # @task(task_id='cvat_exported_crop_lable')
     def cvat_exported_crop_lable(**kwargs):
+
         print('cvat_exported_crop_lable')
         
         cvat_address = Variable.get('drinks_cvat_address')
@@ -445,8 +465,11 @@ with DAG(
         telegram(f'*Airflow Drinks ETL DAG*\n* cvat exported crop lable*\n```  CVAT TASKS STATUSES\n   annotation: {len(cvat_tasks_annotation):>5}\n   validation: {len(cvat_tasks_validation):>5}\n   complete: {len(cvat_tasks_complete):>7}\n\n  AIRFLOW TOTAL TASKS\n   processed: {len(tasks_processed)+tasks_processed_total_counter:>6}\n\n  AIRFLOW DAG TASKS\n   processed: {tasks_processed_total_counter:>6}\n   images total: {dag_task_images_total_counter:>3}\n   images labled: {dag_task_labeled_images_total_counter:>2}\n   lables total: {dag_task_labeles_total_counter:>3}```')
 
         
+        forced_create_ngt = Variable.get('drinks_dag_forced_create_ngt_index', False).lower() == 'true'
+        print('forced_create_ngt:', forced_create_ngt)
+        
         # Если False, то дальше все таски скипаются (см. ShortCircuitOperator)
-        return dag_task_labeles_total_counter > 0
+        return forced_create_ngt or dag_task_labeles_total_counter > 0
             
         
         
@@ -465,11 +488,16 @@ with DAG(
 
 
     
-    def load_all_image_from_path_with_names(glob_path):
+    def load_all_image_from_path_with_names(glob_path, exclude):
         image_list = []
         names = []
         for file_path in glob.glob(glob_path):
-            class_name = file_path.split(sep='/')[-1].split('_')[0]
+            file_path_splitted = file_path.split(sep='/')
+            # Третьей с конца идет задача в CVAT. Смотрим не надо ли ее исключить
+            if file_path_splitted[-3] in exclude:
+                print('exclude', file_path)
+                continue
+            class_name = file_path_splitted[-1].split('_')[0]
             image = cv2.imread(file_path, cv2.IMREAD_GRAYSCALE)
             image_list.append(image)
             names.append(int(class_name))
@@ -483,8 +511,11 @@ with DAG(
     @task(task_id='create_ngt_index')
     def create_ngt_index():
         print('create_ngt_index')
-        
-        train_image_list, names = load_all_image_from_path_with_names(f"{DRINKS_DATA_DIR}/cvat/*/labels/*")
+       
+        exclude = Variable.get("drinks_ngt_index_exclude", deserialize_json=True, default_var=[])        
+        print("exclude:", exclude)
+
+        train_image_list, names = load_all_image_from_path_with_names(f"{DRINKS_DATA_DIR}/cvat/*/labels/*", exclude)
                
         feature_extractor = cv2.xfeatures2d.SIFT_create(2000, edgeThreshold=10)
 
@@ -542,6 +573,7 @@ with DAG(
     
     @task(task_id='deploy_ngt_index')
     def deploy_ngt_index():
+        
         print('deploy_ngt_index')
         
         
