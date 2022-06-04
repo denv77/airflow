@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 45
+DRINKS_AIRFLOW_DAG_VERSION = 46
 
 
 
@@ -235,21 +235,24 @@ with DAG(
                             is_absolute_directory_exists = True
                             os.makedirs(absolute_directory)
 
-                            
+                        image_save_path = f"{absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}"
                         try:
-                            with open(f"{absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}", "wb") as jpg:
+                            with open(image_save_path, "wb") as jpg:
                                 image.save(jpg)
                         except Exception as e:
-                            print(f'Ошибка сохранения картинки {absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}')
+                            print(f'Ошибка сохранения картинки {image_save_path}')
                             print(e)
                             print(traceback.format_exc())
+                            
+                            if os.path.exists(image_save_path):
+                                os.remove(image_save_path)
                             # Если папка пустая, то удаляем ее на случай, если туда больше ничего не запишется
                             if not os.listdir(absolute_directory):
                                 shutil.rmtree(absolute_directory, ignore_errors=True)
                             continue
                             
-                        print(f'Сохранена картинка {absolute_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}')
-                        files_for_cvat.append(f"{relative_directory}/{container_id}_{page_index+1}_{image_index}.{image_ext}")
+                        print(f'Сохранена картинка {image_save_path}')
+                        files_for_cvat.append(f"{image_save_path}")
                         
                         # Нужно проверять здесь, так как может вылезти ошибка на шаге extract_image
                         if not is_container_id_dir_exists:
@@ -294,7 +297,7 @@ with DAG(
                 data = {}
                 data['image_quality'] = 100
                 data['server_files'] =  files_for_cvat
-                data['use_cache'] = true
+                data['use_cache'] = True
                 data['storage_method'] = "cache"
                 data['storage'] = "share"
 
