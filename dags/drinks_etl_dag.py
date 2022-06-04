@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 46
+DRINKS_AIRFLOW_DAG_VERSION = 47
 
 
 
@@ -297,8 +297,9 @@ with DAG(
                 data = {}
                 data['image_quality'] = 100
                 data['server_files'] =  files_for_cvat
-                data['use_cache'] = True
-                data['storage_method'] = "cache"
+                # Почему-то не работает на проде
+                # data['use_cache'] = True
+                # data['storage_method'] = "cache"
                 data['storage'] = "share"
 
                 print(data)
