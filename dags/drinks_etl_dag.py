@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 
 
 
-DRINKS_AIRFLOW_DAG_VERSION = 48
+DRINKS_AIRFLOW_DAG_VERSION = 49
 
 
 
@@ -94,7 +94,7 @@ with DAG(
         print("Used: %d GiB" % (used // (2**30)))
         print("Free: %d GiB" % free_space)
         
-        if free_space <= min_free_space:
+        if free_space <= int(min_free_space):
             telegram(f'*Airflow Drinks ETL DAG*\n* start notification*\n```  version:{DRINKS_AIRFLOW_DAG_VERSION:>6}\n  last id:{last_id:>6}\n\n  DISK USAGE (GB)\n   total:{(total // (2**30)):>7}\n   used:{(used // (2**30)):>8}\n   free:{(free // (2**30)):>8}```\n*ERROR Disk free space <= {min_free_space} Gib*')
             raise AirflowFailException(f"Disk free space {free_space} GiB")
         
